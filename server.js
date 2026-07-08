@@ -1,63 +1,114 @@
 import { serveDir } from "jsr:@std/http/file-server";
 
-// 直前の単語を保持しておく
+// 現在の単語
 let previousWord = "しりとり";
 
-// localhostにDenoのHTTPサーバーを展開
-Deno.serve(async (_req) => {
-    // パス名を取得する
-    // http://localhost:8000/hoge に接続した場合"/hoge"が取得できる
-    const pathname = new URL(_req.url).pathname;
+// 使用済み単語
+let usedWords = [previousWord];
+
+// ゲーム終了フラグ
+let gameOver = false;
+
+Deno.serve(async (req) => {
+    const pathname = new URL(req.url).pathname;
     console.log(`pathname: ${pathname}`);
 
-    // GET /shiritori: 直前の単語を返す
-    if (_req.method === "GET" && pathname === "/shiritori") {
+    // 現在の単語を取得
+    if (req.method === "GET" && pathname === "/shiritori") {
         return new Response(previousWord);
     }
 
-    // POST /shiritori: 次の単語を受け取って保存する
-    if (_req.method === "POST" && pathname === "/shiritori") {
-        // リクエストのペイロードを取得
-        const requestJson = await _req.json();
-        // JSONの中からnextWordを取得
-        const nextWord = requestJson["nextWord"];
+    // リセット
+    if (req.method === "POST" && pathname === "/reset") {
+        previousWord = "しりとり";
+        usedWords = [previousWord];
+        gameOver = false;
 
-        // previousWordの末尾とnextWordの先頭が同一か確認
-        if (previousWord.slice(-1) === nextWord.slice(0, 1)) {
-            // 同一であれば、previousWordを更新
-            previousWord = nextWord;
-        } // 同一でない単語の入力時に、エラーを返す
-        else {
-            return new Response(
-                JSON.stringify({
-                    "errorMessage": "前の単語に続いていません",
-                    "errorCode": "10001",
-                }),
-                {
-                    status: 400,
-                    headers: {
-                        "Content-Type": "application/json; charset=utf-8",
-                    },
-                },
+        return new Response(previousWord);
+    }
+
+    // しりとり
+    if (req.method === "POST" && pathname === "/shiritori") {
+
+        if (gameOver) {
+            return errorResponse(
+                "ゲームは終了しています。リセットしてください。",
+                "10000",
             );
         }
 
-        // 現在の単語を返す
+        const requestJson = await req.json();
+        const nextWord = requestJson["nextWord"];
+
+        // ひらがなのみ
+        if (!/^[ぁ-んー]+$/.test(nextWord)) {
+            return errorResponse(
+                "ひらがなのみ入力してください。",
+                "10002",
+            );
+        }
+
+        // 2文字以上
+        if (nextWord.length < 2) {
+            return errorResponse(
+                "2文字以上の単語を入力してください。",
+                "10003",
+            );
+        }
+
+        // 前の単語につながるか
+        if (previousWord.slice(-1) !== nextWord.slice(0, 1)) {
+            return errorResponse(
+                "前の単語に続いていません。",
+                "10001",
+            );
+        }
+
+        // 使用済み単語
+        if (usedWords.includes(nextWord)) {
+            gameOver = true;
+            return errorResponse(
+                "同じ単語が入力されたためゲーム終了です。",
+                "10004",
+            );
+        }
+
+        // 「ん」で終了
+        if (nextWord.endsWith("ん")) {
+            previousWord = nextWord;
+            usedWords.push(nextWord);
+            gameOver = true;
+
+            return errorResponse(
+                "『ん』で終わったためゲーム終了です。",
+                "10005",
+            );
+        }
+
+        previousWord = nextWord;
+        usedWords.push(nextWord);
+
         return new Response(previousWord);
     }
 
-    // ./public以下のファイルを公開
-    return serveDir(
-        _req,
+    return serveDir(req, {
+        fsRoot: "./public/",
+        urlRoot: "",
+        enableCors: true,
+    });
+});
+
+function errorResponse(message, code) {
+    return new Response(
+        JSON.stringify({
+            errorMessage: message,
+            errorCode: code,
+        }),
         {
-            /*
-            - fsRoot: 公開するフォルダを指定
-            - urlRoot: フォルダを展開するURLを指定。今回はlocalhost:8000/に直に展開する
-            - enableCors: CORSの設定を付加するか
-            */
-            fsRoot: "./public/",
-            urlRoot: "",
-            enableCors: true,
+            status: 400,
+            headers: {
+                "Content-Type": "application/json; charset=utf-8",
+            },
         },
     );
-});
+}
