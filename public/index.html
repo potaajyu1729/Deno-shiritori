@@ -4,86 +4,110 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>しりとり</title>
+  <title>しりとりゲーム</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 
 <body>
-  <h1>しりとり</h1>
+  <!--アニメーション背景粒子-->
+  <canvas id="particleCanvas" aria-hidden="true"></canvas>
 
-  <p id="previousWord"></p>
+  <main class="app">
+    <header class="app-header">
+      <h1 class="title">しりとり<span class="title-accent">ゲーム</span></h1>
+      <p class="subtitle">言葉をつないでハイスコアを目指そう</p>
+    </header>
 
-  <input id="nextWordInput" type="text" />
-  <button id="nextWordSendButton">送信</button>
-  <button id="resetButton">リセット</button>
+    <!--ステータス-->
+    <section class="hud" aria-label="ゲームステータス">
+      <div class="hud-item">
+        <span class="hud-label">スコア</span>
+        <span class="hud-value" id="scoreValue">0</span>
+      </div>
+      <div class="hud-item">
+        <span class="hud-label">ハイスコア</span>
+        <span class="hud-value" id="highScoreValue">0</span>
+      </div>
+      <div class="hud-item">
+        <span class="hud-label">レベル</span>
+        <span class="hud-value" id="levelValue">1</span>
+      </div>
+      <div class="hud-item hud-lives">
+        <span class="hud-label">ライフ</span>
+        <span class="hud-value" id="livesValue" aria-label="残りライフ">♥ ♥ ♥</span>
+      </div>
+    </section>
 
-  <script>
-    window.onload = async () => {
+    <!--タイマー-->
+    <section class="timer-wrap" aria-label="制限時間">
+      <div class="timer-bar-track">
+        <div class="timer-bar" id="timerBar"></div>
+      </div>
+      <span class="timer-text" id="timerText">--</span>
+    </section>
 
-      const response = await fetch("/shiritori", {
-        method: "GET"
-      });
+    <!--コンボ-->
+    <div class="combo-display" id="comboDisplay" aria-live="polite"></div>
 
-      const previousWord = await response.text();
+    <!--ボード-->
+    <section class="board">
+      <p class="board-hint">
+        「<span id="nextCharHint">り</span>」から始まる
+        <span id="minLengthHint">2</span>文字以上の言葉
+      </p>
+      <p class="previous-word" id="previousWord">前の単語: しりとり</p>
 
-      document.querySelector("#previousWord").innerHTML =
-        `前の単語: ${previousWord}`;
+      <form class="input-row" id="wordForm" autocomplete="off">
+        <input id="nextWordInput" type="text" placeholder="ひらがなで入力" aria-label="次の単語"
+          inputmode="kana" disabled />
+        <button id="nextWordSendButton" type="submit" disabled>送信</button>
+      </form>
 
-      document.querySelector("#nextWordSendButton").onclick = async () => {
+      <p class="message" id="message" aria-live="assertive"></p>
+    </section>
 
-        const nextWordInput =
-          document.querySelector("#nextWordInput");
+    <!--操作ボタン-->
+    <section class="controls">
+      <button id="startButton" class="primary-button">ゲーム開始</button>
+      <button id="achievementsButton" class="ghost-button">実績</button>
+      <button id="resetHighScoreButton" class="danger-button">記録リセット</button>
+    </section>
+  </main>
 
-        const nextWordInputText =
-          nextWordInput.value;
+  <!--カウントダウン-->
+  <div class="overlay" id="countdownOverlay" hidden>
+    <div class="overlay-inner">
+      <p class="overlay-sub" id="countdownReason">ミス！</p>
+      <p class="countdown-number" id="countdownNumber">5</p>
+      <p class="overlay-sub">秒後に再開</p>
+    </div>
+  </div>
 
-        const response = await fetch(
-          "/shiritori",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-              nextWord: nextWordInputText
-            })
-          }
-        );
+  <!--ゲームオーバー-->
+  <div class="overlay" id="gameOverOverlay" hidden>
+    <div class="overlay-inner overlay-card">
+      <h2 class="overlay-title">ゲームオーバー</h2>
+      <p class="overlay-score">スコア: <strong id="finalScore">0</strong></p>
+      <p class="overlay-record" id="recordMessage"></p>
+      <p class="overlay-stats" id="finalStats"></p>
+      <button id="retryButton" class="primary-button">もう一度</button>
+    </div>
+  </div>
 
-        if (response.status !== 200) {
-          const errorJson = await response.text();
-          const errorObj = JSON.parse(errorJson);
+  <!--モーダル-->
+  <div class="overlay" id="achievementsOverlay" hidden>
+    <div class="overlay-inner overlay-card modal">
+      <h2 class="overlay-title">実績</h2>
+      <ul class="achievement-list" id="achievementList"></ul>
+      <button id="closeAchievementsButton" class="ghost-button">閉じる</button>
+    </div>
+  </div>
 
-          alert(errorObj["errorMessage"]);
-          return;
-        }
+  <!--実績解除-->
+  <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-        const previousWord = await response.text();
-
-        document.querySelector("#previousWord").innerHTML =
-          `前の単語: ${previousWord}`;
-
-        nextWordInput.value = "";
-      };
-
-      document.querySelector("#resetButton").onclick = async () => {
-
-        const response = await fetch(
-          "/reset",
-          {
-            method: "POST"
-          }
-        );
-
-        const previousWord = await response.text();
-
-        document.querySelector("#previousWord").innerHTML =
-          `前の単語: ${previousWord}`;
-
-        document.querySelector("#nextWordInput").value = "";
-      };
-    };
-  </script>
+  <script src="effects.js"></script>
+  <script src="game.js"></script>
 </body>
 
 </html>
